@@ -1,5 +1,47 @@
-
-
+# Normalise to LF in the repository; check out native line endings on Windows.
 * text=auto
 
-gradlew text eol=lf
+# Anything executed by a Linux shell must stay LF in the working tree too, not
+# just in the index. A CRLF checkout on Windows turns the shebang into
+# "#!/bin/bash\r" and the interpreter fails with "bad interpreter: ^M" - both
+# when run from Git Bash and when copied into a container image.
+*.sh        text eol=lf
+*.bash      text eol=lf
+gradlew     text eol=lf
+
+# Docker parses these on a Linux daemon. A trailing \r after a line
+# continuation silently breaks multi-line RUN instructions.
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.dockerfile    text eol=lf
+.dockerignore   text eol=lf
+
+# Consumed by Linux tooling (kubectl, kustomize, Argo CD, the collector).
+*.yaml      text eol=lf
+*.yml       text eol=lf
+
+# Keep Windows tooling native where it belongs.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary assets: never convert, never diff as text.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.jar       binary
+*.apk       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+
+# Generated code and lockfiles: still tracked, but collapsed in PR diffs so
+# review focuses on hand-written changes.
+*.pb.go             linguist-generated=true
+demo_pb2.py         linguist-generated=true
+demo_pb2_grpc.py    linguist-generated=true
+package-lock.json   linguist-generated=true
+go.sum              linguist-generated=true

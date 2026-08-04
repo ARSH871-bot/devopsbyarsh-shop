@@ -1,0 +1,20 @@
+# Every path has an owner, so GitHub requests review automatically and no
+# change lands without someone accountable for it.
+#
+# Syntax: last matching pattern wins, so the catch-all comes first.
+
+*                       @ARSH871-bot
+
+# Delivery pipeline and deployment. Changes here can publish images or alter
+# what runs in the cluster, so they warrant the closest look.
+/.github/               @ARSH871-bot
+/argocd/                @ARSH871-bot
+/kubernetes/            @ARSH871-bot
+/overlays/              @ARSH871-bot
+
+# The service this repository actually builds and ships.
+/src/product-catalog/   @ARSH871-bot
+
+# Repository-wide conventions.
+/.gitattributes         @ARSH871-bot
+/.gitignore             @ARSH871-bot
