@@ -1515,8 +1515,14 @@ spec:
               value: 'opentelemetry-demo-otelcol'
             - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
               value: cumulative
-            - name: PRODUCT_CATALOG_SERVICE_PORT
+            # The service reads PRODUCT_CATALOG_PORT (renamed upstream in #1864).
+            # PRODUCT_CATALOG_SERVICE_PORT is the pre-1.12.0 name and is read by nothing.
+            - name: PRODUCT_CATALOG_PORT
               value: "8080"
+            # Go does not see the cgroup limit on its own; without this the heap
+            # grows past limits.memory and the kubelet OOMKills the pod.
+            - name: GOMEMLIMIT
+              value: "16MiB"
             - name: FLAGD_HOST
               value: 'opentelemetry-demo-flagd'
             - name: FLAGD_PORT
@@ -1526,6 +1532,8 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=$(OTEL_SERVICE_NAME),service.namespace=opentelemetry-demo,service.version=1.12.0
           resources:
+            requests:
+              memory: 20Mi
             limits:
               memory: 20Mi
           volumeMounts:
