@@ -20,9 +20,13 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: opentelemetry-demo
 
-  # The demo needs no cluster-scoped objects. Leaving this empty means an
-  # accidental ClusterRole or CRD in kubernetes/ is refused rather than applied.
-  clusterResourceWhitelist: []
+  # ClusterIssuer is the only cluster-scoped object the demo needs: cert-manager
+  # uses it to issue the Let's Encrypt certificate in the k3s overlay. Anything
+  # else cluster-scoped - a stray ClusterRole or CRD - is refused rather than
+  # applied.
+  clusterResourceWhitelist:
+    - group: cert-manager.io
+      kind: ClusterIssuer
 
   namespaceResourceWhitelist:
     - group: ''
@@ -30,4 +34,7 @@ spec:
     - group: apps
       kind: '*'
     - group: networking.k8s.io
+      kind: '*'
+    # Traefik Middleware, for the HTTP to HTTPS redirect on k3s.
+    - group: traefik.io
       kind: '*'

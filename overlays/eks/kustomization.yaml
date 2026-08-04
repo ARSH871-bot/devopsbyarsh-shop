@@ -1,0 +1,17 @@
+---
+# AWS/EKS overlay. Documented but NOT what runs devopsbyarsh.shop.
+#
+# Costed before building: the EKS control plane alone is USD $0.10/hour flat
+# (~$73/month, ~$120 NZD) whether or not a single pod is scheduled, plus ~$30
+# for a t3.medium node and ~$16-22 for the ALB. That is ~$200 NZD/month for a
+# portfolio demo, so the live deployment uses overlays/k3s on free-tier ARM
+# instead. This overlay is kept so the AWS-native path stays reproducible for
+# short-lived runs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: opentelemetry-demo
+
+resources:
+  - ../../kubernetes
+  - ingress.yaml
