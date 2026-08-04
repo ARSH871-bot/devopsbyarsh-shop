@@ -1,0 +1,83 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opentelemetry-demo-jaeger
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-jaeger
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: jaeger
+    app.kubernetes.io/name: opentelemetry-demo-jaeger
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      opentelemetry.io/name: opentelemetry-demo-jaeger
+  template:
+    metadata:
+      labels:
+        opentelemetry.io/name: opentelemetry-demo-jaeger
+        app.kubernetes.io/instance: opentelemetry-demo
+        app.kubernetes.io/component: jaeger
+        app.kubernetes.io/name: opentelemetry-demo-jaeger
+    spec:
+      serviceAccountName: opentelemetry-demo
+      containers:
+        - name: jaeger
+          image: jaegertracing/jaeger:2.10.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/jaeger/config.yml
+          ports:
+            - containerPort: 16686
+              name: query
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 13133
+              name: health
+          env:
+            # 0.0.0.0 rather than a hostname: the receiver must bind every
+            # interface in the pod, not resolve its own Service name.
+            - name: JAEGER_HOST
+              value: "0.0.0.0"
+            - name: JAEGER_GRPC_PORT
+              value: "4317"
+            # Storage is in-memory and capped. Traces are lost on restart,
+            # which is the right trade for a demo: no PVC, no EBS bill.
+            - name: MEMORY_MAX_TRACES
+              value: "25000"
+            - name: PROMETHEUS_ADDR
+              value: opentelemetry-demo-prometheus-server:9090
+            - name: OTEL_COLLECTOR_HOST
+              value: opentelemetry-demo-otelcol
+            - name: OTEL_COLLECTOR_PORT_HTTP
+              value: "4318"
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 13133
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 256Mi
+            limits:
+              memory: 640Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/jaeger
+      volumes:
+        - name: config
+          configMap:
+            name: opentelemetry-demo-jaeger
+            items:
+              - key: config.yml
+                path: config.yml
