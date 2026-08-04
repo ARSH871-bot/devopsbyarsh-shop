@@ -5,10 +5,38 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+    # Share a single ALB across every ingress in this group. An ALB bills per
+    # hour whether or not it is busy, so grouping keeps cost flat as more
+    # ingresses are added.
+    alb.ingress.kubernetes.io/group.name: devopsbyarsh
+    # Terminate TLS at the ALB and push all plaintext traffic to HTTPS.
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # certificate-arn is deliberately omitted. The AWS Load Balancer Controller
+    # discovers a matching ACM certificate from the hosts below, which keeps the
+    # AWS account ID out of this public repo. Request the certificate in ACM in
+    # the same region as the cluster, covering devopsbyarsh.shop and
+    # *.devopsbyarsh.shop.
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/success-codes: '200-399'
 spec:
   ingressClassName: alb
   rules:
-    - host: example.com
+    # Envoy (frontend-proxy) is the only entry point. It fans out internally to
+    # the frontend, Grafana, Jaeger, the load generator and the flag UI, so one
+    # host serves the whole demo.
+    - host: devopsbyarsh.shop
+      http:
+        paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: opentelemetry-demo-frontendproxy
+                port:
+                  number: 8080
+    - host: www.devopsbyarsh.shop
       http:
         paths:
           - path: "/"
