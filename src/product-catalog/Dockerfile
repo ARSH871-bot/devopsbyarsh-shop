@@ -27,5 +27,8 @@ WORKDIR /usr/src/app/
 COPY ./products/ ./products/
 COPY --from=builder /usr/src/app/product-catalog/ ./
 
-ENV PRODUCT_CATALOG_PORT=8088
+# Default port. Must match containerPort/targetPort in kubernetes/productcatalog/*.yaml.
+# Docker Compose overrides this with PRODUCT_CATALOG_PORT from .env (3550).
+ENV PRODUCT_CATALOG_PORT=8080
+EXPOSE 8080
 ENTRYPOINT [ "./product-catalog" ]
