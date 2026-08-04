@@ -1,0 +1,33 @@
+---
+# Scopes what this Argo CD project is allowed to deploy, and where.
+# Without an AppProject every Application lands in "default", which permits any
+# repo to any cluster and any namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devopsbyarsh
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: OpenTelemetry Astronomy Shop - devopsbyarsh.shop
+
+  # Only this repository may be synced by Applications in this project.
+  sourceRepos:
+    - https://github.com/ARSH871-bot/devopsbyarsh-shop.git
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: opentelemetry-demo
+
+  # The demo needs no cluster-scoped objects. Leaving this empty means an
+  # accidental ClusterRole or CRD in kubernetes/ is refused rather than applied.
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: apps
+      kind: '*'
+    - group: networking.k8s.io
+      kind: '*'
