@@ -17,14 +17,14 @@ spec:
     # tag reaches main only once the PR merges - review stays in the path to
     # production.
     targetRevision: main
-    path: kubernetes
-    directory:
-      recurse: true
-      # complete-deploy.yaml is a byte-for-byte duplicate of the per-service
-      # subdirectories: all 38 resources appear in both. Without this exclude,
-      # Argo CD sees every resource twice and refuses to sync with
-      # "Resource appeared 2 times among application resources".
-      exclude: 'complete-deploy.yaml'
+    # The k3s overlay, which is what serves devopsbyarsh.shop. Argo detects the
+    # kustomization.yaml and renders it; no directory.recurse or exclude is
+    # needed, because the base lists its resources explicitly and therefore
+    # never picks up complete-deploy.yaml.
+    #
+    # Point this at overlays/eks to deploy the AWS-native path
+    # instead. Nothing else in this Application changes.
+    path: overlays/k3s
 
   destination:
     server: https://kubernetes.default.svc

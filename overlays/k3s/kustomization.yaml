@@ -1,0 +1,46 @@
+---
+# k3s overlay. This is what actually serves devopsbyarsh.shop.
+#
+# Runs on an Oracle Cloud Always Free ARM instance (4 cores / 24 GB, $0/month
+# permanently) rather than EKS, whose control plane alone bills ~$120 NZD/month
+# before a single pod is scheduled. See overlays/eks for the AWS-native path.
+#
+# Differences from the EKS overlay:
+#   ingress   Traefik (bundled with k3s) instead of the AWS Load Balancer Controller
+#   TLS       cert-manager + Let's Encrypt instead of ACM
+#   redirect  an explicit Traefik Middleware instead of the ssl-redirect annotation
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: opentelemetry-demo
+
+resources:
+  - ../../kubernetes
+  - ingress.yaml
+
+# 24 GB of headroom, so the tight limits chosen for a single EKS node are not
+# needed here. Raised where the EKS values were genuinely marginal: 20Mi for a
+# Go service carrying the full OTel SDK leaves no room for a traffic spike.
+# Strategic merge, not a JSON patch by index. Kustomize merges containers by
+# name and env entries by name, so this survives someone reordering the env
+# block. An index-based patch would not: GOMEMLIMIT sits at env[4] today, and
+# a wrong index silently rewrites PRODUCT_CATALOG_PORT instead.
+patches:
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-productcatalogservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: productcatalogservice
+                env:
+                  - name: GOMEMLIMIT
+                    value: "96MiB"
+                resources:
+                  requests:
+                    memory: 64Mi
+                  limits:
+                    memory: 128Mi

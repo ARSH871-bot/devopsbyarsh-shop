@@ -1,0 +1,78 @@
+---
+# Redirects plaintext to HTTPS. The ALB does this with a single ssl-redirect
+# annotation; Traefik needs an explicit Middleware object.
+#
+# k3s ships Traefik v3 under the traefik.io API group. On older k3s releases
+# this group is traefik.containo.us/v1alpha1 - check with
+# `kubectl api-resources | grep middleware` if this fails to apply.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# Issues and renews the certificate from Let's Encrypt. This replaces ACM,
+# which is what the EKS overlay relies on.
+#
+# Requires cert-manager to be installed in the cluster first; it is an
+# operator with its own CRDs and is not managed by this Application.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: vhoraarsh91@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-proxy
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # The @kubernetescrd suffix and namespace prefix are required by Traefik's
+    # CRD provider; a bare middleware name silently does nothing.
+    traefik.ingress.kubernetes.io/router.middlewares: opentelemetry-demo-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    # cert-manager writes the issued certificate here. The Secret does not
+    # need to exist beforehand.
+    - hosts:
+        - devopsbyarsh.shop
+        - www.devopsbyarsh.shop
+      secretName: devopsbyarsh-shop-tls
+  rules:
+    # Envoy (frontend-proxy) is the only entry point. It fans out internally to
+    # the frontend, Grafana, Jaeger, the load generator and the flag UI, so one
+    # host serves the whole demo.
+    - host: devopsbyarsh.shop
+      http:
+        paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: opentelemetry-demo-frontendproxy
+                port:
+                  number: 8080
+    - host: www.devopsbyarsh.shop
+      http:
+        paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: opentelemetry-demo-frontendproxy
+                port:
+                  number: 8080

@@ -1,0 +1,66 @@
+---
+# Base kustomization: the platform-neutral half of the deployment.
+#
+# Files are listed explicitly rather than globbed so that complete-deploy.yaml
+# is excluded. It duplicates every resource in these directories, and including
+# both makes Argo CD refuse to sync with "Resource appeared 2 times among
+# application resources".
+#
+# No Ingress here. Ingress is the one genuinely platform-specific piece, so it
+# lives in overlays/eks (ALB + ACM) and overlays/k3s (Traefik + cert-manager).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: opentelemetry-demo
+
+resources:
+  - serviceaccount.yaml
+  - accounting/deploy.yaml
+  - ad/deploy.yaml
+  - ad/svc.yaml
+  - cart/deploy.yaml
+  - cart/svc.yaml
+  - checkout/deploy.yaml
+  - checkout/svc.yaml
+  - currency/deploy.yaml
+  - currency/svc.yaml
+  - email/deploy.yaml
+  - email/svc.yaml
+  - flagd/cm.yaml
+  - flagd/deploy.yaml
+  - flagd/svc.yaml
+  - frauddetection/deploy.yaml
+  - frontend/deploy.yaml
+  - frontend/svc.yaml
+  - frontendproxy/deploy.yaml
+  - frontendproxy/svc.yaml
+  - grafana/cm.yaml
+  - grafana/deploy.yaml
+  - grafana/svc.yaml
+  - imageprovider/deploy.yaml
+  - imageprovider/svc.yaml
+  - jaeger/cm.yaml
+  - jaeger/deploy.yaml
+  - jaeger/svc.yaml
+  - kafka/deploy.yaml
+  - kafka/svc.yaml
+  - loadgenerator/deploy.yaml
+  - loadgenerator/svc.yaml
+  - otelcollector/cm.yaml
+  - otelcollector/deploy.yaml
+  - otelcollector/svc.yaml
+  - payment/deploy.yaml
+  - payment/svc.yaml
+  - productcatalog/deploy.yaml
+  - productcatalog/svc.yaml
+  - prometheus/cm.yaml
+  - prometheus/deploy.yaml
+  - prometheus/svc.yaml
+  - quote/deploy.yaml
+  - quote/svc.yaml
+  - recommendation/deploy.yaml
+  - recommendation/svc.yaml
+  - shipping/deploy.yaml
+  - shipping/svc.yaml
+  - valkey/deploy.yaml
+  - valkey/svc.yaml
