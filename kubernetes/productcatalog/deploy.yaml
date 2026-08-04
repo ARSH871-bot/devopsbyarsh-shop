@@ -63,6 +63,19 @@ spec:
               value: http://$(OTEL_COLLECTOR_NAME):4317
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=$(OTEL_SERVICE_NAME),service.namespace=opentelemetry-demo,service.version=1.12.0
+          # main.go registers a gRPC health server (healthpb.RegisterHealthServer).
+          # Without these probes nothing ever calls it, so a pod listening on the
+          # wrong port still reports Ready and silently blackholes traffic.
+          readinessProbe:
+            grpc:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            grpc:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             requests:
               memory: 20Mi

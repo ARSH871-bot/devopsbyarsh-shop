@@ -55,7 +55,9 @@ jobs:
     docker:
         runs-on: ubuntu-latest
 
-        needs: build
+        # Gate on lint as well as build, so a red code-quality job cannot
+        # ship an image.
+        needs: [build, code-quality]
 
         steps:
         - name: checkout code
