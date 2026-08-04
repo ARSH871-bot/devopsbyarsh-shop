@@ -1,0 +1,52 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: astronomy-shop
+  namespace: argocd
+  finalizers:
+    # Makes deleting the Application also delete what it deployed, instead of
+    # orphaning 38 resources in the cluster.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: devopsbyarsh
+
+  source:
+    repoURL: https://github.com/ARSH871-bot/devopsbyarsh-shop.git
+    # main, not the PR branch. CI writes the image tag to the PR branch, so the
+    # tag reaches main only once the PR merges - review stays in the path to
+    # production.
+    targetRevision: main
+    path: kubernetes
+    directory:
+      recurse: true
+      # complete-deploy.yaml is a byte-for-byte duplicate of the per-service
+      # subdirectories: all 38 resources appear in both. Without this exclude,
+      # Argo CD sees every resource twice and refuses to sync with
+      # "Resource appeared 2 times among application resources".
+      exclude: 'complete-deploy.yaml'
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opentelemetry-demo
+
+  syncPolicy:
+    automated:
+      # Delete resources removed from git, rather than leaving them behind.
+      prune: true
+      # Revert manual kubectl edits back to what git says.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Keeps the last-applied annotation off resources that are already large.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # Enough history to roll back a bad image tag, not so much that the CRD grows
+  # without bound.
+  revisionHistoryLimit: 10
