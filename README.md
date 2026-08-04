@@ -1,4 +1,137 @@
-**Note:** This project is a fork of `opentelemetry-demo`. Thanks to the team and contributors for opensourcing this wonderful demo project. Definitely one of the best on internet.
+<!-- markdownlint-disable-next-line -->
+# devopsbyarsh.shop
+
+**A production-shaped delivery platform built around the OpenTelemetry Astronomy
+Shop.** Live at **[devopsbyarsh.shop](https://devopsbyarsh.shop)**.
+
+[![product-catalog-ci](https://github.com/ARSH871-bot/devopsbyarsh-shop/actions/workflows/ci.yaml/badge.svg)](https://github.com/ARSH871-bot/devopsbyarsh-shop/actions/workflows/ci.yaml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?color=red)](./LICENSE)
+
+## Provenance
+
+The application is **not mine**. It is a fork of
+[open-telemetry/opentelemetry-demo](https://github.com/open-telemetry/opentelemetry-demo)
+— a 14-service polyglot microservice system (Go, Rust, C#, Java, Kotlin, Python,
+C++, PHP, Ruby, Node, TypeScript) — routed here via
+[Abhishek Veeramalla's DevOps course](https://github.com/iam-veeramalla), whose
+commits remain in `git log` under his name. Credit to both; they wrote the
+services and the original single-service pipeline.
+
+**What is mine is everything around it:** the CI/CD, the Kubernetes deployment,
+the observability stack, the GitOps layer, and the bugs found and fixed along
+the way. That work is listed below, and every item is traceable to a commit.
+
+## What this repository adds
+
+| Area | Upstream / course | Here |
+|---|---|---|
+| CI | one service, lint non-blocking, no tests | lint-gated, 9 unit tests, multi-arch |
+| Images | `linux/amd64` | `linux/amd64` + `linux/arm64`, cross-compiled |
+| Kubernetes | 19 app Deployments | + collector, Jaeger, Prometheus, Grafana |
+| Health | none | gRPC readiness + liveness probes |
+| Layout | flat manifests + a duplicate bundle | kustomize base with `k3s` / `eks` overlays |
+| CD | none | Argo CD `AppProject` + `Application` |
+| Ingress | `host: example.com`, HTTP | real domain, HTTPS, redirect |
+| Repo | no protection, no templates | protected `main`, `CODEOWNERS`, PR template |
+
+## Bugs found and fixed
+
+The interesting part. Each was live in the upstream or course version.
+
+**The pipeline was green and shipped a pod that could not serve traffic.**
+The manifests were Helm-rendered from chart `1.12.0`, when the service read
+`PRODUCT_CATALOG_SERVICE_PORT`. Upstream
+[#1864](https://github.com/open-telemetry/opentelemetry-demo/pull/1864) renamed
+it to `PRODUCT_CATALOG_PORT` and the manifests were never re-rendered, so they
+set a variable nothing reads. `mustMapEnv` would have exited loudly on startup —
+except the Dockerfile's `ENV PRODUCT_CATALOG_PORT=8088` satisfied the lookup, so
+the container booted on `8088` while the Service targeted `8080`. A crash became
+a silent blackhole: `Running`, `1/1 Ready`, zero restarts, every request timing
+out.
+
+**CI force-pushed GitHub's internal merge ref onto `main`, three times.**
+`git push origin HEAD:main -f` on a `pull_request` event pushes
+`refs/pull/N/merge`, not the branch. It landed unreviewed PR content on `main`
+and would silently discard anything committed since the PR opened. The evidence
+is still in the history as `Merge <sha> into <sha>` commits. Now pushes to the
+PR branch, and `main` is protected against force-pushes.
+
+**Kubernetes had no telemetry backend at all.** Every service pointed at
+`opentelemetry-demo-otelcol:4317`; no Service by that name existed anywhere in
+the repo. Traces, metrics and logs were dropped, and `/grafana` and `/jaeger`
+returned 503 — on a project whose entire premise is observability.
+
+**A missing GitHub secret resolves to an empty string, not an error.** The
+workflow referenced `DOCKER_USERNAME`; the configured secret was
+`DOCKERHUB_USERNAME`. Docker login failed with `Username required` rather than
+anything pointing at the cause.
+
+**`go test ./...` passed against zero test files.** The unit-test stage was
+decorative. Now 9 tests covering every gRPC handler and the catalog loader —
+including a duplicate-ID check, because `GetProduct` breaks on first match, so a
+duplicate would make one product permanently unreachable.
+
+**Shell scripts were checked out with CRLF.** `.gitattributes` pinned `eol=lf`
+for `gradlew` alone, so `docker-gen-proto.sh`, `ide-gen-proto.sh` and `run.bash`
+got `#!/bin/sh\r` on Windows — `bad interpreter: ^M` in any Linux shell or
+container.
+
+Also: Docker build cache mounts attached to a bare `mkdir` instead of to
+`go mod download` and `go build`, so every build recompiled the full dependency
+tree; a `20Mi` memory limit with no `GOMEMLIMIT`, which OOMKills a Go binary
+carrying the OTel SDK; and `complete-deploy.yaml`, a byte-for-byte duplicate of
+the per-service manifests that makes Argo CD refuse to sync.
+
+## Why k3s and not EKS
+
+EKS was built first and is kept in `overlays/eks`, but it does not run the site.
+The control plane alone bills **USD $0.10/hour flat — roughly $120 NZD/month —
+whether or not a single pod is scheduled**, before ~$50 for a node and ~$30 for
+an ALB. That is ~$200 NZD/month for a portfolio demo.
+
+The live deployment runs k3s on an Oracle Cloud Always Free ARM instance
+(4 cores / 24 GB, permanently $0). Both paths are in the repository:
+
+```
+kubernetes/          platform-neutral kustomize base
+overlays/k3s/        Traefik ingress, cert-manager + Let's Encrypt   <- live
+overlays/eks/        ALB ingress, ACM certificate discovery
+```
+
+This is also why images are built for `arm64`: Ampere A1 is ARM, and an
+amd64-only image fails there with `exec format error` after a pull that appears
+to succeed.
+
+## Pipeline
+
+```
+PR to main
+  ├─ build         go build + go test ./...
+  ├─ code-quality  golangci-lint            (gates the image; previously did not)
+  ├─ docker        buildx -> amd64 + arm64 -> Docker Hub, tagged with the run id
+  └─ updatek8s     write the tag into the manifest, commit to the PR branch
+                            |
+                     merge to main
+                            |
+                   Argo CD syncs overlays/k3s
+```
+
+Images are tagged with `github.run_id` — immutable, never `latest`, always
+traceable to one run.
+
+## Running it
+
+```bash
+docker compose up --force-recreate --remove-orphans --detach   # full stack
+make start-minimal                                             # without Kafka/Postgres
+
+kubectl kustomize overlays/k3s     # render the live deployment
+kubectl kustomize overlays/eks     # render the AWS path
+```
+
+---
+
+Everything below is the upstream OpenTelemetry Demo documentation, retained as-is.
 
 <!-- markdownlint-disable-next-line -->
 # <img src="https://opentelemetry.io/img/logos/opentelemetry-logo-nav.png" alt="OTel logo" width="45"> OpenTelemetry Demo
