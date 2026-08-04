@@ -1,0 +1,44 @@
+---
+# Split into two Services on purpose. The name opentelemetry-demo-jaeger-query
+# is load-bearing: frontendproxy sets JAEGER_SERVICE_HOST to exactly this, and
+# Envoy routes /jaeger here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry-demo-jaeger-query
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-jaeger
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: jaeger
+    app.kubernetes.io/name: opentelemetry-demo-jaeger-query
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 16686
+      name: query
+      targetPort: 16686
+      protocol: TCP
+  selector:
+    opentelemetry.io/name: opentelemetry-demo-jaeger
+---
+# Ingest side, referenced by the collector's otlp/jaeger exporter.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry-demo-jaeger-collector
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-jaeger
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: jaeger
+    app.kubernetes.io/name: opentelemetry-demo-jaeger-collector
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4317
+      name: otlp-grpc
+      targetPort: 4317
+      protocol: TCP
+  selector:
+    opentelemetry.io/name: opentelemetry-demo-jaeger

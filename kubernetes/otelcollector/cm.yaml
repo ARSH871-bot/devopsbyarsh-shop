@@ -1,0 +1,93 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentelemetry-demo-otelcol
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-otelcol
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: otelcol
+    app.kubernetes.io/name: opentelemetry-demo-otelcol
+    app.kubernetes.io/part-of: opentelemetry-demo
+data:
+  # Adapted from src/otel-collector/otelcol-config.yml. The Compose config
+  # cannot be reused as-is: docker_stats needs the Docker socket, hostmetrics
+  # needs a /hostfs mount, the redis receiver targets the Compose hostname, and
+  # the opensearch exporter has no backend here.
+  relay.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+            cors:
+              allowed_origins:
+                - "http://*"
+                - "https://*"
+      httpcheck/frontend-proxy:
+        targets:
+          - endpoint: http://opentelemetry-demo-frontendproxy:8080
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'otel-collector'
+              scrape_interval: 10s
+              static_configs:
+                - targets: ['127.0.0.1:8888']
+
+    processors:
+      # Sheds load instead of being OOMKilled when a trace burst arrives.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      batch: {}
+      transform:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(name, "\\?.*", "")
+              - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
+
+    connectors:
+      # Derives RED metrics from spans, which is what the spanmetrics dashboard
+      # in Grafana reads.
+      spanmetrics: {}
+
+    extensions:
+      # Backs the readiness and liveness probes in deploy.yaml. The collector
+      # does not serve 13133 unless this is enabled.
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    exporters:
+      debug: {}
+      otlp/jaeger:
+        endpoint: opentelemetry-demo-jaeger-collector:4317
+        tls:
+          insecure: true
+      otlphttp/prometheus:
+        endpoint: http://opentelemetry-demo-prometheus-server:9090/api/v1/otlp
+        tls:
+          insecure: true
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, transform, batch]
+          exporters: [otlp/jaeger, spanmetrics]
+        metrics:
+          receivers: [otlp, prometheus, httpcheck/frontend-proxy, spanmetrics]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/prometheus]
+        # No OpenSearch in this deployment, so logs terminate at debug. Swap in
+        # an opensearch or loki exporter here to make them queryable.
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]

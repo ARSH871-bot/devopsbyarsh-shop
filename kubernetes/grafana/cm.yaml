@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentelemetry-demo-grafana-datasources
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-grafana
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: grafana
+    app.kubernetes.io/name: opentelemetry-demo-grafana
+    app.kubernetes.io/part-of: opentelemetry-demo
+data:
+  # Adapted from src/grafana/provisioning/datasources/. The OpenSearch
+  # datasource is omitted: there is no OpenSearch in this deployment, and a
+  # datasource pointing at nothing shows up as a red error in the UI.
+  datasources.yaml: |
+    apiVersion: 1
+
+    datasources:
+      - name: Prometheus
+        uid: webstore-metrics
+        type: prometheus
+        url: http://opentelemetry-demo-prometheus-server:9090
+        editable: true
+        isDefault: true
+        jsonData:
+          # Turns a metric spike into a clickable link to the trace behind it.
+          exemplarTraceIdDestinations:
+            - datasourceUid: webstore-traces
+              name: trace_id
+
+      - name: Jaeger
+        uid: webstore-traces
+        type: jaeger
+        # Includes the base_path the Jaeger query extension is configured with.
+        url: http://opentelemetry-demo-jaeger-query:16686/jaeger/ui
+        editable: true
+        isDefault: false

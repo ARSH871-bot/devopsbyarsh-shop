@@ -1,0 +1,27 @@
+---
+# The name is load-bearing: every application Deployment sets
+# OTEL_COLLECTOR_NAME=opentelemetry-demo-otelcol and builds its OTLP endpoint
+# from it. Renaming this Service silently drops all telemetry.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry-demo-otelcol
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-otelcol
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: otelcol
+    app.kubernetes.io/name: opentelemetry-demo-otelcol
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4317
+      name: otlp-grpc
+      targetPort: 4317
+      protocol: TCP
+    - port: 4318
+      name: otlp-http
+      targetPort: 4318
+      protocol: TCP
+  selector:
+    opentelemetry.io/name: opentelemetry-demo-otelcol

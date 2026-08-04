@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry-demo-grafana
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-grafana
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: grafana
+    app.kubernetes.io/name: opentelemetry-demo-grafana
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  type: ClusterIP
+  ports:
+    # Port 80, not 3000. frontendproxy sets GRAFANA_SERVICE_PORT=80 and Envoy
+    # dials that, so the Service has to publish 80 and map it to the
+    # container's 3000.
+    - port: 80
+      name: http
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    opentelemetry.io/name: opentelemetry-demo-grafana

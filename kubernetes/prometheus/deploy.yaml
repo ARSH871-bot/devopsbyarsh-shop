@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opentelemetry-demo-prometheus-server
+  labels:
+    opentelemetry.io/name: opentelemetry-demo-prometheus-server
+    app.kubernetes.io/instance: opentelemetry-demo
+    app.kubernetes.io/component: prometheus
+    app.kubernetes.io/name: opentelemetry-demo-prometheus-server
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      opentelemetry.io/name: opentelemetry-demo-prometheus-server
+  template:
+    metadata:
+      labels:
+        opentelemetry.io/name: opentelemetry-demo-prometheus-server
+        app.kubernetes.io/instance: opentelemetry-demo
+        app.kubernetes.io/component: prometheus
+        app.kubernetes.io/name: opentelemetry-demo-prometheus-server
+    spec:
+      serviceAccountName: opentelemetry-demo
+      containers:
+        - name: prometheus
+          image: quay.io/prometheus/prometheus:v3.5.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            # Without this flag the collector's OTLP push to /api/v1/otlp 404s
+            # and every metric is silently dropped.
+            - --web.enable-otlp-receiver
+            # Lets Grafana jump from a metric spike straight to the trace that
+            # caused it, which is the whole point of the exemplars dashboard.
+            - --enable-feature=exemplar-storage
+            - --web.enable-lifecycle
+            - --storage.tsdb.retention.time=6h
+          ports:
+            - containerPort: 9090
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 320Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: storage
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: opentelemetry-demo-prometheus-server
+        # emptyDir, not a PVC. Six hours of retention is plenty for a demo and
+        # this avoids provisioning an EBS volume that bills whether used or not.
+        - name: storage
+          emptyDir: {}
