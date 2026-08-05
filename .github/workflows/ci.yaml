@@ -36,6 +36,10 @@ jobs:
           uses: actions/setup-go@v5
           with:
             go-version: 1.22
+            # go.sum lives in the service directory, not the repo root, so the
+            # default '**/go.sum' lookup misses and every run warns
+            # "Restore cache failed" then rebuilds the module cache from scratch.
+            cache-dependency-path: src/product-catalog/go.sum
         
         - name: Build
           run: |
@@ -46,7 +50,10 @@ jobs:
         - name: unit tests
           run: |
             cd src/product-catalog
-            go test ./...
+            # -v so the log names each test. Without it a passing run prints a
+            # single "ok" line, which is indistinguishable from a package that
+            # contains no tests at all - which is what this stage used to be.
+            go test -v ./...
     
     code-quality:
         runs-on: ubuntu-latest
@@ -59,6 +66,7 @@ jobs:
           uses: actions/setup-go@v5
           with:
            go-version: 1.22
+           cache-dependency-path: src/product-catalog/go.sum
 
         - name: Run golangci-lint
           uses: golangci/golangci-lint-action@v6
