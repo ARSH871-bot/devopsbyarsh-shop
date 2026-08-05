@@ -149,6 +149,17 @@ jobs:
 
         - name: Install cosign
           uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+          with:
+            # Pinned to v2.x deliberately. cosign v3 defaults
+            # --new-bundle-format to true, which publishes the signature
+            # through the OCI 1.1 referrers API; Docker Hub accepts that write
+            # but does not serve the referrer back, so verification reports
+            # "no signatures found" for an image that signed successfully.
+            # Setting the flag to false is not a way out either - v3 then
+            # errors with "must provide --new-bundle-format or --bundle ...
+            # with --signing-config". v2 writes a plain sha256-<digest>.sig
+            # tag, which every registry serves.
+            cosign-release: v2.6.4
 
         # Signs by digest, never by tag. A tag is mutable and can be repointed
         # at a different image; the digest is the content address of the exact
@@ -157,13 +168,7 @@ jobs:
           env:
             IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog
             DIGEST: ${{ steps.build.outputs.digest }}
-          # --new-bundle-format=false is required for Docker Hub. cosign v3
-          # defaults it to true, which stores the signature through the OCI 1.1
-          # referrers API. Docker Hub accepts that write but does not serve the
-          # referrer back, so verification reports "no signatures found" for an
-          # image that signed successfully. The legacy format writes a plain
-          # sha256-<digest>.sig tag, which every registry supports.
-          run: cosign sign --yes --new-bundle-format=false "${IMAGE}@${DIGEST}"
+          run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
         # Signing without verifying only proves the command exited 0. This
         # asserts the signature is attributable to this workflow, on this
