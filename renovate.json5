@@ -15,6 +15,15 @@
 
   "packageRules": [
     {
+      // GitHub Actions in .github/workflows are pinned to commit SHAs so a
+      // moved tag cannot silently change what runs in CI. Pinning alone would
+      // just leave them stale, so Renovate keeps the SHAs current and rewrites
+      // the trailing "# v4" comment to match.
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "pinDigests": true,
+    },
+    {
       "matchFileNames": ["src/accounting/**"],
       "groupName": "accounting",
     },
