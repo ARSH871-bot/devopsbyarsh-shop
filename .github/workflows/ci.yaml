@@ -113,6 +113,25 @@ jobs:
             # subsequent runs reuse work instead of rebuilding from scratch.
             cache-from: type=gha
             cache-to: type=gha,mode=max
+            # Ship an SBOM and build provenance with the image, so what is
+            # inside it can be audited after the fact rather than guessed at.
+            sbom: true
+            provenance: mode=max
+
+        # Scans the image that was actually published, not the source tree, so
+        # base-image CVEs are covered too - alpine ships a libc and busybox
+        # that no Go dependency scanner would ever look at.
+        - name: Scan image for vulnerabilities
+          uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+          with:
+            image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{ env.IMAGE_TAG }}
+            format: table
+            severity: HIGH,CRITICAL
+            # Fail the job on findings, but only those with a fix available.
+            # Gating on unfixable CVEs would block every release on something
+            # no action can resolve, which trains people to ignore the gate.
+            ignore-unfixed: true
+            exit-code: '1'
 
     
     updatek8s:
