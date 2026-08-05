@@ -185,43 +185,18 @@ jobs:
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
     
-    updatek8s:
-        runs-on: ubuntu-latest
-
-        needs: docker
-
-        # The only job that commits back to the branch.
-        permissions:
-            contents: write
-
-        steps:
-        - name: checkout code
-          uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-          with:
-            # Check out the PR branch itself, not the ephemeral merge ref.
-            # Without this, HEAD is refs/pull/N/merge and pushing it rewrites history.
-            ref: ${{ github.head_ref }}
-            token: ${{ secrets.GITHUB_TOKEN }}
-
-        - name: Update tag in kubernetes deployment manifest
-          run: |
-               sed -i "s|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{ env.IMAGE_TAG }}|" kubernetes/productcatalog/deploy.yaml
-
-        - name: Commit and push changes
-          run: |
-            git config --global user.email "vhoraarsh87@gmail.com"
-            git config --global user.name "ARSH871-bot"
-            git add kubernetes/productcatalog/deploy.yaml
-            if git diff --cached --quiet; then
-              echo "Image tag unchanged, nothing to commit"
-              exit 0
-            fi
-            git commit -m "[CI]: Update product catalog image tag"
-            git push origin HEAD:${{ github.head_ref }}
-
-        
-        
-          
-
-
-        
+    # The updatek8s job that used to live here has been removed.
+    #
+    # It ran sed over kubernetes/productcatalog/deploy.yaml and committed the
+    # new image tag to the PR branch. That made the bot commit the PR head, and
+    # GitHub deliberately does not run workflows on GITHUB_TOKEN commits, so the
+    # head carried no checks and required status checks could never be
+    # satisfied - every PR needed an admin bypass to merge.
+    #
+    # Moving it to run on merge does not help either: main requires a pull
+    # request, so GITHUB_TOKEN cannot push there, and a PR opened by the bot
+    # would hit the same no-checks wall.
+    #
+    # Image tag updates are handled by Argo CD Image Updater instead, which
+    # watches the registry directly and writes back outside the protected
+    # branch. The annotations are on the Application in argocd/application.yaml.

@@ -1,14 +1,18 @@
 ---
 # k3s overlay. This is what actually serves devopsbyarsh.shop.
 #
-# Runs on an Oracle Cloud Always Free ARM instance (4 cores / 24 GB, $0/month
-# permanently) rather than EKS, whose control plane alone bills ~$120 NZD/month
-# before a single pod is scheduled. See overlays/eks for the AWS-native path.
+# Runs on a Hetzner CAX11 - 2 ARM vCPU, 4 GB, ~EUR 4/month - rather than EKS,
+# whose control plane alone bills ~$120 NZD/month before a single pod is
+# scheduled. See overlays/eks for the AWS-native path.
+#
+# ARM is why the CI builds linux/arm64: an amd64-only image fails on Ampere
+# with "exec format error" after a pull that appears to succeed.
 #
 # Differences from the EKS overlay:
 #   ingress   Traefik (bundled with k3s) instead of the AWS Load Balancer Controller
 #   TLS       cert-manager + Let's Encrypt instead of ACM
 #   redirect  an explicit Traefik Middleware instead of the ssl-redirect annotation
+#   sizing    requests separated from limits, see below
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -18,14 +22,218 @@ resources:
   - ../../kubernetes
   - ingress.yaml
 
-# 24 GB of headroom, so the tight limits chosen for a single EKS node are not
-# needed here. Raised where the EKS values were genuinely marginal: 20Mi for a
-# Go service carrying the full OTel SDK leaves no room for a traffic spike.
-# Strategic merge, not a JSON patch by index. Kustomize merges containers by
-# name and env entries by name, so this survives someone reordering the env
-# block. An index-based patch would not: GOMEMLIMIT sits at env[4] today, and
-# a wrong index silently rewrites PRODUCT_CATALOG_PORT instead.
+# Sizing for a 4 GB node.
+#
+# The base manifests set limits with no requests, and Kubernetes then defaults
+# each request to its limit. That totals 6624Mi across 23 deployments, so the
+# scheduler would demand 6.6 GB and most pods would sit Pending forever on a
+# node with ~3.2 GB allocatable.
+#
+# Fixed by separating the two: requests reflect steady-state usage, limits
+# still cap a burst. Only requests have to fit. This is deliberate
+# oversubscription - if every service spiked at once the node would be under
+# memory pressure - which is the right trade for a demo that idles most of the
+# time, and the wrong one for production.
+#
+# The generous limits are also trimmed. Where a value was cut hard, the
+# service's own memory ceiling is lowered to match, so it stays inside the
+# limit rather than being OOMKilled at it.
+#
+# Strategic merge, not JSON patches by index. Kustomize merges containers and
+# env entries by name, so these survive a reordered env block; an index-based
+# patch does not.
 patches:
+  # 1500Mi was by far the largest single reserve, for a load generator that
+  # only needs to keep the dashboards from looking empty. Fewer simulated
+  # users, far less memory.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-loadgenerator
+      spec:
+        template:
+          spec:
+            containers:
+              - name: loadgenerator
+                env:
+                  - name: LOCUST_USERS
+                    value: "3"
+                resources:
+                  requests:
+                    memory: 160Mi
+                  limits:
+                    memory: 384Mi
+
+  # 6h retention over a handful of services is a small TSDB.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-prometheus-server
+      spec:
+        template:
+          spec:
+            containers:
+              - name: prometheus
+                resources:
+                  requests:
+                    memory: 224Mi
+                  limits:
+                    memory: 448Mi
+
+  # In-memory trace storage, so the cap has to come down with the limit or the
+  # pod is OOMKilled once the buffer fills.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-jaeger
+      spec:
+        template:
+          spec:
+            containers:
+              - name: jaeger
+                env:
+                  - name: MEMORY_MAX_TRACES
+                    value: "8000"
+                resources:
+                  requests:
+                    memory: 192Mi
+                  limits:
+                    memory: 384Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-otelcol
+      spec:
+        template:
+          spec:
+            containers:
+              - name: otelcol
+                resources:
+                  requests:
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-grafana
+      spec:
+        template:
+          spec:
+            containers:
+              - name: grafana
+                resources:
+                  requests:
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+
+  # JVM. The limit stays where it was; only the request drops, because Kafka
+  # idles well below its ceiling but will not tolerate a low hard cap.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-kafka
+      spec:
+        template:
+          spec:
+            containers:
+              - name: kafka
+                resources:
+                  requests:
+                    memory: 300Mi
+                  limits:
+                    memory: 600Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-recommendationservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: recommendationservice
+                resources:
+                  requests:
+                    memory: 128Mi
+                  limits:
+                    memory: 320Mi
+
+  # Also JVM: request halved, limit untouched.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-adservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: adservice
+                resources:
+                  requests:
+                    memory: 150Mi
+                  limits:
+                    memory: 300Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-frauddetectionservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: frauddetectionservice
+                resources:
+                  requests:
+                    memory: 150Mi
+                  limits:
+                    memory: 300Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-frontend
+      spec:
+        template:
+          spec:
+            containers:
+              - name: frontend
+                resources:
+                  requests:
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: opentelemetry-demo-cartservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: cartservice
+                resources:
+                  requests:
+                    memory: 96Mi
+                  limits:
+                    memory: 192Mi
+
   - patch: |
       apiVersion: apps/v1
       kind: Deployment

@@ -4,6 +4,17 @@ kind: Application
 metadata:
   name: astronomy-shop
   namespace: argocd
+  annotations:
+    # Argo CD Image Updater replaces the sed-and-commit step CI used to run.
+    # It watches Docker Hub directly, so nothing has to push to a protected
+    # branch. write-back-method: argocd stores the resolved image on the
+    # Application rather than committing to git, which keeps main clean and
+    # avoids the bot-commit-blocks-required-checks problem entirely.
+    argocd-image-updater.argoproj.io/image-list: >-
+      productcatalog=arsh885/product-catalog
+    argocd-image-updater.argoproj.io/productcatalog.update-strategy: digest
+    argocd-image-updater.argoproj.io/productcatalog.allow-tags: any
+    argocd-image-updater.argoproj.io/write-back-method: argocd
   finalizers:
     # Makes deleting the Application also delete what it deployed, instead of
     # orphaning 38 resources in the cluster.
