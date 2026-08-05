@@ -30,10 +30,10 @@ jobs:
 
         steps:
         - name: checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
         - name: Setup Go 1.22
-          uses: actions/setup-go@v5
+          uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
           with:
             go-version: 1.22
             # go.sum lives in the service directory, not the repo root, so the
@@ -60,16 +60,16 @@ jobs:
 
         steps:
         - name: checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         
         - name: Setup Go 1.22
-          uses: actions/setup-go@v5
+          uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
           with:
            go-version: 1.22
            cache-dependency-path: src/product-catalog/go.sum
 
         - name: Run golangci-lint
-          uses: golangci/golangci-lint-action@v6
+          uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
           with:
             version: v1.55.2
             working-directory: src/product-catalog
@@ -83,23 +83,23 @@ jobs:
 
         steps:
         - name: checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
         # Registers binfmt handlers so buildx can emit non-native architectures.
         - name: Set up QEMU
-          uses: docker/setup-qemu-action@v3
+          uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
         - name: Install Docker
-          uses: docker/setup-buildx-action@v3
+          uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
         - name: Login to Docker
-          uses: docker/login-action@v3
+          uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
           with:
             username: ${{ secrets.DOCKERHUB_USERNAME }}
             password: ${{ secrets.DOCKER_TOKEN }}
 
         - name: Docker Push
-          uses: docker/build-push-action@v6
+          uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
           with:
             context: src/product-catalog
             file: src/product-catalog/Dockerfile
@@ -122,7 +122,7 @@ jobs:
 
         steps:
         - name: checkout code
-          uses: actions/checkout@v4
+          uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
           with:
             # Check out the PR branch itself, not the ephemeral merge ref.
             # Without this, HEAD is refs/pull/N/merge and pushing it rewrites history.
