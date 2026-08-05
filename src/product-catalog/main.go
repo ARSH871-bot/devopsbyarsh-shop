@@ -230,6 +230,18 @@ func (p *productCatalog) Check(ctx context.Context, req *healthpb.HealthCheckReq
 	return &healthpb.HealthCheckResponse{Status: healthpb.HealthCheckResponse_SERVING}, nil
 }
 
+// List reports the health of every service this server exposes. grpc-go 1.83
+// added it to the HealthServer interface, so implementing it is required to
+// compile against that release. The catalog serves a single unnamed service,
+// so the snapshot mirrors Check.
+func (p *productCatalog) List(ctx context.Context, req *healthpb.HealthListRequest) (*healthpb.HealthListResponse, error) {
+	return &healthpb.HealthListResponse{
+		Statuses: map[string]*healthpb.HealthCheckResponse{
+			"": {Status: healthpb.HealthCheckResponse_SERVING},
+		},
+	}, nil
+}
+
 func (p *productCatalog) Watch(req *healthpb.HealthCheckRequest, ws healthpb.Health_WatchServer) error {
 	return status.Errorf(codes.Unimplemented, "health check via Watch not implemented")
 }
