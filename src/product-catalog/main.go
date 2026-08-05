@@ -128,8 +128,14 @@ func main() {
 		log.Println("Shutdown meter provider")
 	}()
 	openfeature.AddHooks(otelhooks.NewTracesHook())
-	err := openfeature.SetProvider(flagd.NewProvider())
+
+	// flagd v0.6 returns a construction error instead of panicking, so the
+	// provider has to be built before it can be registered.
+	flagdProvider, err := flagd.NewProvider()
 	if err != nil {
+		log.Fatalf("Creating flagd provider: %v", err)
+	}
+	if err := openfeature.SetProvider(flagdProvider); err != nil {
 		log.Fatal(err)
 	}
 
