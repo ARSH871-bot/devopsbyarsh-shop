@@ -157,7 +157,13 @@ jobs:
           env:
             IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog
             DIGEST: ${{ steps.build.outputs.digest }}
-          run: cosign sign --yes "${IMAGE}@${DIGEST}"
+          # --new-bundle-format=false is required for Docker Hub. cosign v3
+          # defaults it to true, which stores the signature through the OCI 1.1
+          # referrers API. Docker Hub accepts that write but does not serve the
+          # referrer back, so verification reports "no signatures found" for an
+          # image that signed successfully. The legacy format writes a plain
+          # sha256-<digest>.sig tag, which every registry supports.
+          run: cosign sign --yes --new-bundle-format=false "${IMAGE}@${DIGEST}"
 
         # Signing without verifying only proves the command exited 0. This
         # asserts the signature is attributable to this workflow, on this
@@ -169,6 +175,7 @@ jobs:
             DIGEST: ${{ steps.build.outputs.digest }}
           run: |
             cosign verify "${IMAGE}@${DIGEST}" \
+              --new-bundle-format=false \
               --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/" \
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
