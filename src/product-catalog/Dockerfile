@@ -2,7 +2,7 @@
 # so Go cross-compiles instead of running under QEMU emulation. Emulated arm64
 # Go builds take tens of minutes; cross-compiling takes the same time as a
 # native build.
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 # Supplied automatically by buildx for each requested platform.
 ARG TARGETOS
