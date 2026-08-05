@@ -201,6 +201,25 @@ func TestHealthCheckReportsServing(t *testing.T) {
 	}
 }
 
+// List backs the same probes as Check and is required by the HealthServer
+// interface from grpc-go 1.83 onward.
+func TestHealthListReportsServing(t *testing.T) {
+	svc := &productCatalog{}
+
+	res, err := svc.List(context.Background(), &healthpb.HealthListRequest{})
+	if err != nil {
+		t.Fatalf("List() returned error: %v", err)
+	}
+	if len(res.Statuses) == 0 {
+		t.Fatal("List() reported no services")
+	}
+	for name, st := range res.Statuses {
+		if st.Status != healthpb.HealthCheckResponse_SERVING {
+			t.Errorf("List() reported %q as %v, want SERVING", name, st.Status)
+		}
+	}
+}
+
 func TestWatchIsUnimplemented(t *testing.T) {
 	svc := &productCatalog{}
 
