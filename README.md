@@ -25,8 +25,15 @@ the way. That work is listed below, and every item is traceable to a commit.
 
 | Area | Upstream / course | Here |
 |---|---|---|
-| CI | one service, lint non-blocking, no tests | lint-gated, 9 unit tests, multi-arch |
+| CI | one service, lint non-blocking, no tests | lint-gated, 10 unit tests, multi-arch |
 | Images | `linux/amd64` | `linux/amd64` + `linux/arm64`, cross-compiled |
+| Image tags | `github.run_id` | commit SHA — idempotent and traceable |
+| Toolchain | Go 1.22 (EOL), golangci-lint v1.55 | Go 1.25, golangci-lint v2.12 |
+| Vulnerabilities | unscanned | Trivy gate on fixable HIGH/CRITICAL — **0** |
+| Provenance | none | SBOM + build provenance attached |
+| Signing | none | cosign keyless, verified in CI |
+| Actions | mutable tags (`@v4`) | 13/13 pinned to SHAs, Renovate-maintained |
+| Token scope | `contents: write` for all jobs | least privilege per job |
 | Kubernetes | 19 app Deployments | + collector, Jaeger, Prometheus, Grafana |
 | Health | none | gRPC readiness + liveness probes |
 | Layout | flat manifests + a duplicate bundle | kustomize base with `k3s` / `eks` overlays |
@@ -60,6 +67,27 @@ PR branch, and `main` is protected against force-pushes.
 `opentelemetry-demo-otelcol:4317`; no Service by that name existed anywhere in
 the repo. Traces, metrics and logs were dropped, and `/grafana` and `/jaeger`
 returned 503 — on a project whose entire premise is observability.
+
+**An out-of-support toolchain was silently blocking every security fix.** The
+first Trivy run failed with 25 findings, 23 HIGH and 2 CRITICAL. The alpine
+base was clean; all of them were Go dependencies. The patched releases required
+Go ≥ 1.25, and the project was pinned to Go 1.22 — itself past end of support
+and no longer receiving fixes. The individual CVEs were symptoms; the toolchain
+pin was the cause. Upgrading it cleared the chain: **25 → 3 → 1 → 0**.
+
+The upgrade then surfaced three things the older toolchain had hidden. Go 1.24
+tightened `vet`'s printf analysis and rejected a `status.Errorf` call 1.22 had
+accepted. `golangci-lint` v1.55.2 could not compile a `go 1.25.0` module at
+all — it exited 3 before inspecting anything, meaning a linter that reported
+green while checking nothing. And gRPC 1.83 added `List` to the `HealthServer`
+interface, so the CVE fix did not compile until it was implemented.
+
+**cosign signed successfully and produced nothing retrievable.** cosign v3
+defaults to publishing signatures through the OCI 1.1 referrers API. Docker Hub
+accepts that write and returns success, then does not serve the referrer back,
+so verification failed with `no signatures found` against an image that had
+just signed cleanly. Without a verify step in CI this would have shipped
+green — a pipeline advertising signatures no consumer could check.
 
 **A missing GitHub secret resolves to an empty string, not an error.** The
 workflow referenced `DOCKER_USERNAME`; the configured secret was
@@ -106,9 +134,13 @@ to succeed.
 
 ```
 PR to main
-  ├─ build         go build + go test ./...
-  ├─ code-quality  golangci-lint            (gates the image; previously did not)
-  ├─ docker        buildx -> amd64 + arm64 -> Docker Hub, tagged with the run id
+  ├─ build         go build + go test -v ./...
+  ├─ code-quality  golangci-lint                      (gates the image)
+  ├─ docker        buildx -> amd64 + arm64 -> Docker Hub
+  │                  ├─ SBOM + provenance attached
+  │                  ├─ Trivy: fail on fixable HIGH/CRITICAL
+  │                  ├─ cosign sign   (keyless, by digest)
+  │                  └─ cosign verify (asserts repo + workflow identity)
   └─ updatek8s     write the tag into the manifest, commit to the PR branch
                             |
                      merge to main
@@ -116,8 +148,29 @@ PR to main
                    Argo CD syncs overlays/k3s
 ```
 
-Images are tagged with `github.run_id` — immutable, never `latest`, always
-traceable to one run.
+Images are tagged with the **commit SHA**, never `latest`. `run_id` was tried
+first and rejected: it changes on every run, including a re-run of unchanged
+code, so the manifest was rewritten and committed each time. A content-derived
+tag makes the step idempotent, and `git show <tag>` resolves the exact source
+of whatever is running in the cluster.
+
+Signing runs after scanning and signs the **digest**, not the tag — a tag can
+be repointed at different content, a digest cannot.
+
+## Verifying a published image
+
+Every image carries a cosign signature proving which repository and workflow
+built it:
+
+```bash
+cosign verify docker.io/arsh885/product-catalog:<commit-sha> \
+  --certificate-identity-regexp "^https://github.com/ARSH871-bot/devopsbyarsh-shop/\.github/workflows/" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+Keyless, so there is no public key to distribute or private key to rotate — the
+signing identity is the workflow itself, recorded in the Sigstore transparency
+log.
 
 ## Running it
 
