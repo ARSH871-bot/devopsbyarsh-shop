@@ -10,6 +10,20 @@ on:
 permissions:
     contents: write
 
+env:
+    # Tag images by the commit that produced them, not by github.run_id.
+    #
+    # run_id changes on every run, including a plain re-run of unchanged code,
+    # so the manifest was rewritten and committed every single time - six such
+    # commits accumulated on one branch. A content-derived tag makes the whole
+    # step idempotent: same code, same tag, no diff, no commit.
+    #
+    # head.sha rather than github.sha: on a pull_request event github.sha is
+    # the ephemeral refs/pull/N/merge commit, which is not the code being
+    # shipped and does not exist after the PR closes. The fallback keeps this
+    # correct if a push trigger is ever added.
+    IMAGE_TAG: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
     build:
         runs-on: ubuntu-latest
@@ -86,7 +100,7 @@ jobs:
             # A1 instance. An amd64-only image fails there with
             # "exec format error" after the pull appears to succeed.
             platforms: linux/amd64,linux/arm64
-            tags: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{github.run_id}}
+            tags: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{ env.IMAGE_TAG }}
             # Layer cache in the registry, so the second architecture and
             # subsequent runs reuse work instead of rebuilding from scratch.
             cache-from: type=gha
@@ -109,7 +123,7 @@ jobs:
 
         - name: Update tag in kubernetes deployment manifest
           run: |
-               sed -i "s|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{github.run_id}}|" kubernetes/productcatalog/deploy.yaml
+               sed -i "s|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/product-catalog:${{ env.IMAGE_TAG }}|" kubernetes/productcatalog/deploy.yaml
 
         - name: Commit and push changes
           run: |
